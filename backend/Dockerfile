@@ -25,5 +25,7 @@ USER appuser
 
 EXPOSE 4000
 
-# Apply pending migrations on start, then serve. PORT/DATABASE_URL/JWT_SECRET via env.
-CMD ["sh", "-c", "npx prisma migrate deploy && node src/server.js"]
+# Serve directly. Run migrations separately (Render Shell, direct DB URL port
+# 5432 — never the 6543 pooler): npx prisma migrate deploy.
+# PORT/DATABASE_URL/JWT_SECRET via env.
+CMD ["node", "src/server.js"]
