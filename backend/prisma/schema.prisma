@@ -1,0 +1,215 @@
+// Phase 1: School Management System - PostgreSQL schema
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+enum Role {
+  PRINCIPAL
+  TEACHER
+  STUDENT
+  RECEPTION
+  PEON
+}
+
+enum AttendanceStatus {
+  PRESENT
+  ABSENT
+  LEAVE
+  HALF_DAY
+}
+
+enum FeeStatus {
+  PENDING
+  PAID
+  OVERDUE
+  PARTIAL
+}
+
+model Users {
+  id            String    @id @default(uuid())
+  email         String    @unique
+  password_hash String
+  role          Role
+  display_name  String?   @map("display_name")
+  phone         String?
+  createdAt     DateTime  @default(now()) @map("created_at")
+  updatedAt     DateTime  @updatedAt @map("updated_at")
+
+  classesTeaching ClassSubjects[] @relation("SubjectTeacher")
+  classesOwned    Classes[]       @relation("ClassTeacher")
+  studentProfile  Students?
+  attendance      Attendance[]
+  worksheets      Worksheets[]    @relation("UploadedBy")
+  payroll         Payroll[]
+
+  @@index([role])
+  @@map("users")
+}
+
+model Classes {
+  id               String  @id @default(uuid())
+  name             String
+  section          String
+  class_teacher_id String? @map("class_teacher_id")
+
+  classTeacher  Users?          @relation("ClassTeacher", fields: [class_teacher_id], references: [id], onDelete: SetNull)
+  students      Students[]
+  classSubjects ClassSubjects[]
+
+  @@unique([name, section])
+  @@index([class_teacher_id])
+  @@map("classes")
+}
+
+model Subjects {
+  id   String @id @default(uuid())
+  name String
+  code String @unique
+
+  classSubjects ClassSubjects[]
+
+  @@map("subjects")
+}
+
+model ClassSubjects {
+  id                 String  @id @default(uuid())
+  class_id           String  @map("class_id")
+  subject_id         String  @map("subject_id")
+  subject_teacher_id String? @map("subject_teacher_id")
+
+  classObj       Classes   @relation(fields: [class_id], references: [id], onDelete: Cascade)
+  subject        Subjects  @relation(fields: [subject_id], references: [id], onDelete: Cascade)
+  subjectTeacher Users?    @relation("SubjectTeacher", fields: [subject_teacher_id], references: [id], onDelete: SetNull)
+
+  marks      Marks[]
+  worksheets Worksheets[]
+
+  @@unique([class_id, subject_id])
+  @@index([class_id])
+  @@index([subject_id])
+  @@index([subject_teacher_id])
+  @@map("class_subjects")
+}
+
+model Students {
+  id               String @id @default(uuid())
+  user_id          String @unique @map("user_id")
+  roll_number      String @map("roll_number")
+  current_class_id String @map("current_class_id")
+  student_name     String @map("student_name")
+  father_name      String @map("father_name")
+  father_phone     String @map("father_phone")
+  mother_name      String @map("mother_name")
+  mother_phone     String @map("mother_phone")
+  aadhar_number    String @unique @map("aadhar_number")
+  gender           String @default("") @map("gender")
+
+  user         Users   @relation(fields: [user_id], references: [id], onDelete: Cascade)
+  currentClass Classes @relation(fields: [current_class_id], references: [id], onDelete: Restrict)
+
+  marks Marks[]
+  fees  Fees[]
+
+  @@unique([current_class_id, roll_number])
+  @@index([current_class_id])
+  @@map("students")
+}
+
+model Marks {
+  id               String @id @default(uuid())
+  student_id       String @map("student_id")
+  class_subject_id String @map("class_subject_id")
+  score            Float
+  max_score        Float  @map("max_score")
+
+  student      Students      @relation(fields: [student_id], references: [id], onDelete: Cascade)
+  classSubject ClassSubjects @relation(fields: [class_subject_id], references: [id], onDelete: Cascade)
+
+  @@unique([student_id, class_subject_id])
+  @@index([student_id])
+  @@index([class_subject_id])
+  @@map("marks")
+}
+
+model Worksheets {
+  id               String   @id @default(uuid())
+  title            String
+  file_url         String   @map("file_url")
+  class_subject_id String   @map("class_subject_id")
+  uploaded_by      String   @map("uploaded_by")
+  createdAt        DateTime @default(now()) @map("created_at")
+
+  classSubject ClassSubjects @relation(fields: [class_subject_id], references: [id], onDelete: Cascade)
+  uploader     Users         @relation("UploadedBy", fields: [uploaded_by], references: [id], onDelete: Restrict)
+
+  @@index([class_subject_id])
+  @@index([uploaded_by])
+  @@index([createdAt])
+  @@map("worksheets")
+}
+
+model Attendance {
+  id      String           @id @default(uuid())
+  user_id String           @map("user_id")
+  date    DateTime         @db.Date
+  status  AttendanceStatus
+
+  user Users @relation(fields: [user_id], references: [id], onDelete: Cascade)
+
+  @@unique([user_id, date])
+  @@index([user_id])
+  @@index([date])
+  @@map("attendance")
+}
+
+model Fees {
+  id         String    @id @default(uuid())
+  student_id String    @map("student_id")
+  title      String    @default("Fee")
+  amount     Decimal   @db.Decimal(10, 2)
+  status     FeeStatus @default(PENDING)
+  due_date   DateTime? @map("due_date")
+  createdAt  DateTime  @default(now()) @map("created_at")
+  updatedAt  DateTime  @updatedAt @map("updated_at")
+
+  student Students @relation(fields: [student_id], references: [id], onDelete: Cascade)
+  payments FeePayments[]
+
+  @@index([student_id])
+  @@index([status])
+  @@index([createdAt])
+  @@map("fees")
+}
+
+model FeePayments {
+  id          String   @id @default(uuid())
+  fee_id      String   @map("fee_id")
+  amount      Decimal  @db.Decimal(10, 2)
+  paid_at     DateTime @default(now()) @map("paid_at")
+  received_by String   @map("received_by")
+  note        String   @default("")
+
+  fee Fees @relation(fields: [fee_id], references: [id], onDelete: Cascade)
+
+  @@index([fee_id])
+  @@map("fee_payments")
+}
+
+model Payroll {
+  id           String   @id @default(uuid())
+  user_id      String   @map("user_id")
+  amount_paid  Decimal  @map("amount_paid") @db.Decimal(10, 2)
+  payment_date DateTime @map("payment_date") @db.Date
+
+  user Users @relation(fields: [user_id], references: [id], onDelete: Cascade)
+
+  @@index([user_id])
+  @@index([payment_date])
+  @@map("payroll")
+}
